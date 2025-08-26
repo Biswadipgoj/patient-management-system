@@ -1,7 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for
 from flask_sqlalchemy import SQLAlchemy
-import pandas as pd
-import os
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///patients.db'
@@ -51,55 +49,7 @@ class OutcomeAssessment(db.Model):
     miasm_data = db.Column(db.Text)
     susceptibility_data = db.Column(db.Text)
 
-# Document generation function
-def generate_patient_document(patient):
-    if not os.path.exists('documents'):
-        os.makedirs('documents')
-
-    file_path = os.path.join('documents', f'{patient.reg_no}_{patient.name.replace(" ", "_")}.xlsx')
-
-    with pd.ExcelWriter(file_path, engine='openpyxl') as writer:
-        patient_data = {
-            'Field': [
-                'Reg. No.', 'Name', 'Screening No.', 'Screening Date', 'Age', 'Sex', 'Residence', 'Contact No.',
-                'Duration of suffering from MC', 'Co-morbidities', 'Risk factors', 'Treatment taken',
-                'Weight (kg)', 'Height (cm)', 'Education status', 'Socio-economic status'
-            ],
-            'Value': [
-                patient.reg_no, patient.name, patient.screening_no, patient.screening_date, patient.age, patient.sex,
-                patient.residence, patient.contact_no, patient.duration_mc, patient.co_morbidities,
-                patient.risk_factors, patient.treatment_taken, patient.weight_kg, patient.height_cm,
-                patient.education_status, patient.socio_economic_status
-            ]
-        }
-        patient_df = pd.DataFrame(patient_data)
-        patient_df.to_excel(writer, sheet_name='Patient Info', index=False)
-
-        if patient.baseline_treatment:
-            baseline_data = {
-                'Field': ['Date', 'Present Complaint', 'Prescription'],
-                'Value': [
-                    patient.baseline_treatment.date,
-                    patient.baseline_treatment.present_complaint,
-                    patient.baseline_treatment.prescription
-                ]
-            }
-            baseline_df = pd.DataFrame(baseline_data)
-            baseline_df.to_excel(writer, sheet_name='Baseline Treatment', index=False)
-        
-        assessments_data = [
-            {
-                'Assessment #': oa.assessment_number,
-                'Date': oa.date,
-                'Brief notes': oa.brief_notes,
-                'Prescription': oa.prescription,
-                'ORIDL - Main Complaint': oa.oridl_main_complaint,
-                'ORIDL - Well-being': oa.oridl_wellbeing,
-            } for oa in patient.outcome_assessments
-        ]
-        assessments_df = pd.DataFrame(assessments_data)
-        assessments_df.to_excel(writer, sheet_name='Outcome Assessments', index=False)
-
+# Routes
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -152,7 +102,6 @@ def add_baseline_treatment(patient_id):
         )
         db.session.add(new_baseline)
         db.session.commit()
-        generate_patient_document(patient)
         return render_template('success.html', message="Baseline Treatment details entered successfully.")
 
     return render_template('add_baseline_treatment.html', patient=patient)
@@ -187,7 +136,6 @@ def add_outcome_assessment(patient_id):
         )
         db.session.add(new_assessment)
         db.session.commit()
-        generate_patient_document(patient)
         return redirect(url_for('patient_details', search_query=patient.reg_no))
 
     return render_template('add_outcome_assessment.html', patient=patient, assessment_number=assessment_number, show_pdf_forms=(assessment_number == 6))
@@ -196,3 +144,4 @@ if __name__ == '__main__':
     with app.app_context():
         db.create_all()
     app.run(debug=True)
+    
